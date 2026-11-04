@@ -1,0 +1,8 @@
+{
+  "newMessageInFluffyChat": "New message in Danstream",
+  "openAppToReadMessages": "Open app to read messages",
+  "incomingMessages": "Incoming Messages",
+  "unreadChatsInApp": "Unread chats in {app}",
+  "directChats": "Direct Chats",
+  "groups": "Groups"
+}
