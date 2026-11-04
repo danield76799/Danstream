@@ -6,6 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 concurrency:
   group: main_deploy
   cancel-in-progress: false
@@ -79,7 +82,7 @@ jobs:
 
       - name: Build Android APK
         run: |
-          flutter build apk --release
+          flutter build apk --release --no-tree-shake-icons
           mkdir -p output
           cp build/app/outputs/flutter-apk/app-release.apk output/danstream-release.apk
 
