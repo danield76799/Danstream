@@ -1,0 +1,94 @@
+name: Main Deploy Workflow
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: main_deploy
+  cancel-in-progress: false
+
+jobs:
+  build_android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Free disk space
+        run: |
+          echo "=== Before cleanup ==="
+          df -h
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android/sdk/ndk
+          sudo rm -rf /usr/local/lib/android/sdk/emulator
+          sudo rm -rf /usr/local/lib/android/sdk/system-images
+          sudo rm -rf /usr/local/lib/android/sdk/platforms/android-2*
+          sudo rm -rf /usr/local/lib/android/sdk/platforms/android-3*
+          sudo rm -rf /usr/local/lib/android/sdk/build-tools/2*
+          sudo rm -rf /usr/local/lib/android/sdk/build-tools/3*
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo apt-get clean
+          echo "=== After cleanup ==="
+          df -h
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'zulu'
+          cache: 'gradle'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.24.0'
+          channel: 'stable'
+          cache: true
+
+      - name: Install Flutter dependencies
+        run: flutter pub get
+
+      - name: Generate localization
+        run: flutter gen-l10n
+
+      - name: Setup signing
+        id: signing
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ] && [ -n "$KEYSTORE_PASSWORD" ] && [ -n "$KEY_ALIAS" ] && [ -n "$KEY_PASSWORD" ]; then
+            echo "$KEYSTORE_BASE64" | base64 -d > android/app/upload-keystore.jks
+            echo "storePassword=$KEYSTORE_PASSWORD" > android/key.properties
+            echo "keyPassword=$KEY_PASSWORD" >> android/key.properties
+            echo "keyAlias=$KEY_ALIAS" >> android/key.properties
+            echo "storeFile=upload-keystore.jks" >> android/key.properties
+            echo "has_signing=true" >> $GITHUB_OUTPUT
+            echo "Signing configured"
+          else
+            echo "has_signing=false" >> $GITHUB_OUTPUT
+            echo "WARNING: No signing secrets found — using debug signing"
+          fi
+
+      - name: Build Android APK
+        run: |
+          flutter build apk --release
+          mkdir -p output
+          cp build/app/outputs/flutter-apk/app-release.apk output/danstream-release.apk
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ github.run_number }}
+          name: Danstream v${{ github.run_number }}
+          files: output/danstream-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
